@@ -775,10 +775,10 @@ class PackageSelectionTest extends TestCase
         $packageA0 = new Package('vendor/a', '1.0.0.0', '1.0');
         $packageA1 = new Package('vendor/a', '1.1.0.0', '1.1');
         $packageB0 = new Package('vendor/b', '1.0.0.0', '1.0');
-        $packageB1 = new Package('vendor/b', '1.1.0.0', '1.1');
+        $packageB1 = new Package('vendor/b', '1.1.0.0', '1.1'); // Best B for A.
         $packageB2 = new Package('vendor/b', '1.2.0.0', '1.2');
         $packageC0 = new Package('vendor/c', '1.0.0.0', '1.0');
-        $packageC1 = new Package('vendor/c', '1.1.0.0', '1.1');
+        $packageC1 = new Package('vendor/c', '1.1.0.0', '1.1'); // Best C for A.
 
         $constraint1 = new Constraint('=', '1.1');
         $link1 = new Link('vendor/a', 'vendor/b', $constraint1);
@@ -815,4 +815,50 @@ class PackageSelectionTest extends TestCase
 
         $this->assertEquals(array_values([$packageA0, $packageB1, $packageC1]), array_values($property->getValue($builder)));
     }
+
+    public function testOnlyBestCandidatesOnlyTop()
+    {
+        $pool = new Pool();
+        $repository = new ArrayRepository();
+
+        $packageA = new Package('vendor/a', '1.0.0.0', '1.0');
+        $packageB1 = new Package('vendor/b', '2.1.0.0', '2.1');
+        $packageB2 = new Package('vendor/b', '2.2.0.0', '2.2');
+
+        $constraintAtoB = new Constraint('>', '2');
+        $linkAtoB = new Link('vendor/a', 'vendor/b', $constraintAtoB);
+        $packageA->setRequires([$linkAtoB]);
+        $repository->addPackage($packageA);
+        $repository->addPackage($packageB1);
+        $repository->addPackage($packageB2);
+        $pool->addRepository($repository);
+
+        $rootConstraintA = new Constraint('=', '1.0');
+        $rootLinkA = new Link('topA', 'vendor/a', $rootConstraintA);
+
+        $rootConstraintB = new Constraint('=', '2.1');
+        $rootLinkB = new Link('topB', 'vendor/b', $rootConstraintB);
+
+        $config = [
+            'only-best-candidates' => TRUE,
+            'require-dependencies' => TRUE,
+        ];
+        $builder = new PackageSelection(new NullOutput(), 'build', $config, false);
+        $reflection = new \ReflectionClass(get_class($builder));
+        $method = $reflection->getMethod('selectLinks');
+        $method->setAccessible(true);
+        $method->invokeArgs($builder, [$pool, [$rootLinkA, $rootLinkB], FALSE, FALSE]);
+
+        $property = $reflection->getProperty('selected');
+        $property->setAccessible(true);
+
+        $selectedPackages = $property->getValue($builder);
+        $prettyVersions = [];
+        foreach ($selectedPackages as $selected) {
+            $prettyVersions[] = $selected->getPrettyName() . ':' . $selected->getPrettyVersion();
+        }
+        // Do not select more packages than the top level needs.
+        $this->assertEquals(['vendor/a:1.0', 'vendor/b:2.1'], $prettyVersions);
+    }
+
 }
