@@ -853,12 +853,13 @@ class PackageSelectionTest extends TestCase
         $property->setAccessible(true);
 
         $selectedPackages = $property->getValue($builder);
-        $prettyVersions = [];
+        $prettyRequires = [];
+
         foreach ($selectedPackages as $selected) {
-            $prettyVersions[] = $selected->getPrettyName() . ':' . $selected->getPrettyVersion();
+            $prettyRequires[] = $selected->getPrettyName() . ':' . $selected->getPrettyVersion();
         }
         // Do not select more packages than the top level needs.
-        $this->assertEquals(['vendor/a:1.0', 'vendor/b:2.1'], $prettyVersions);
+        $this->assertEquals(['vendor/a:1.0', 'vendor/b:2.1'], $prettyRequires);
     }
 
 }

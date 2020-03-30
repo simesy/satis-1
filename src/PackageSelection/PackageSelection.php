@@ -138,6 +138,9 @@ class PackageSelection
      */
     public function select(Composer $composer, bool $verbose): array
     {
+
+        ini_set("memory_limit", "-1");
+
         // run over all packages and store matching ones
         $this->output->writeln('<info>Scanning packages</info>');
 
@@ -181,6 +184,8 @@ class PackageSelection
 
         $this->addRepositories($pool, $repos);
 
+        var_dump(get_class_methods($composer)); die();
+
         // determine the required packages
         $rootLinks = $this->requireAll ? $this->getAllLinks($repos, $this->minimumStability, $verbose) : $this->getFilteredLinks($composer);
 
@@ -205,6 +210,8 @@ class PackageSelection
         }
 
         $this->setSelectedAsAbandoned();
+
+        $this->filterBestCandidates($pool, $verbose);
 
         $this->pruneBlacklisted($pool, $verbose);
 
@@ -672,7 +679,9 @@ class PackageSelection
         reset($links);
 
         while (null !== key($links)) {
+
             $link = current($links);
+            $this->output->writeln('Link ' . $link->getSource() . ' / ' . $link->getTarget() . ' / ' . $link->getConstraint());
 
             if (is_a($link, PackageInterface::class)) {
                 $matches = [$link];
@@ -718,7 +727,20 @@ class PackageSelection
                         if ($verbose) {
                             $this->output->writeln('Selected ' . $package->getPrettyName() . ' (' . $package->getPrettyVersion() . ')');
                         }
+
                         $this->selected[$uniqueName] = $package;
+
+                        if ($this->onlyBestCandidates) {
+                            // the links gathered at top level overrule deep dependencies
+                            foreach ($this->selected as $name => $existingPackage) {
+                                if ($package->getName() === $existingPackage->getName() && $existingPackage->getUniqueName() != $uniqueName) {
+                                    unset($this->selected[$uniqueName]);
+                                    if ($verbose) {
+                                        $this->output->writeln('De-selecting ' . $package->getPrettyName() . ' due to better candidate ' . $existingPackage->getPrettyVersion());
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     $required = $this->getRequired($package, $isRoot);
